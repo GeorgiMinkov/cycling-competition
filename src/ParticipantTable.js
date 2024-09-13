@@ -1,6 +1,4 @@
-import React, { useState } from 'react';
-import axios from 'axios';
-import { v4 as uuidv4 } from 'uuid';
+import React, { useState, useEffect } from 'react';
 import {
   Table,
   TableHead,
@@ -14,23 +12,46 @@ import {
   Grid,
   Typography,
   Snackbar,
-  IconButton,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
 } from '@mui/material';
-import { Add, Delete, PlayArrow, Stop, Refresh, Save, Assignment } from '@mui/icons-material';
+import { Delete, Refresh, Save, Assignment } from '@mui/icons-material';
 
 const ParticipantTable = () => {
-  const [participants, setParticipants] = useState([]);
+  const [participants, setParticipants] = useState(() => {
+    // Initialize from localStorage and rehydrate dates
+    const savedParticipants = localStorage.getItem('participants');
+    if (savedParticipants) {
+      return JSON.parse(savedParticipants).map((p) => ({
+        ...p,
+        startTime: p.startTime ? new Date(p.startTime) : null,
+        stopTime: p.stopTime ? new Date(p.stopTime) : null,
+      }));
+    }
+    return [];
+  });
+
   const [numParticipants, setNumParticipants] = useState(0);
-  const [tableCreated, setTableCreated] = useState(false);
+  const [tableCreated, setTableCreated] = useState(participants.length > 0);
   const [showSnackbar, setShowSnackbar] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteIndex, setDeleteIndex] = useState(null);
-  const [nextParticipantNumber, setNextParticipantNumber] = useState(1); // Initialize to 1
+  const [nextParticipantNumber, setNextParticipantNumber] = useState(() => {
+    const savedNumber = localStorage.getItem('nextParticipantNumber');
+    return savedNumber ? parseInt(savedNumber, 10) : 1;
+  });
+
+  const [startInput, setStartInput] = useState('');
+  const [stopInput, setStopInput] = useState('');
+
+  // Save participants and next participant number to localStorage on update
+  useEffect(() => {
+    localStorage.setItem('participants', JSON.stringify(participants));
+    localStorage.setItem('nextParticipantNumber', nextParticipantNumber.toString());
+  }, [participants, nextParticipantNumber]);
 
   // Handle snackbar close
   const handleSnackbarClose = () => {
@@ -54,22 +75,18 @@ const ParticipantTable = () => {
       return;
     }
 
-    // Correctly increment nextParticipantNumber inside the loop
-    const newParticipants = Array.from({ length: numParticipants }, (_, index) => {
-      const participant = {
-        id: uuidv4(),
-        name: '',
-        startTime: null,
-        stopTime: null,
-        elapsedTime: null,
-        timerRunning: false,
-        participantNumber: nextParticipantNumber + index, // Correct sequential assignment
-      };
-      return participant;
-    });
+    const newParticipants = Array.from({ length: numParticipants }, (_, index) => ({
+      id: nextParticipantNumber + index,
+      name: '',
+      startTime: null,
+      stopTime: null,
+      elapsedTime: null,
+      timerRunning: false,
+      participantNumber: nextParticipantNumber + index,
+    }));
 
-    setNextParticipantNumber(nextParticipantNumber + numParticipants); // Increment the next available number
-    setParticipants(newParticipants);
+    setNextParticipantNumber(nextParticipantNumber + numParticipants);
+    setParticipants([...participants, ...newParticipants]);
     setTableCreated(true);
     setShowSnackbar(true);
   };
@@ -83,107 +100,77 @@ const ParticipantTable = () => {
   };
 
   // Function to start the timer for a specific participant
-  const handleStart = (id) => {
-    const participant = participants.find((p) => p.id === id);
+  const handleStart = (participantNumber) => {
+    const participant = participants.find((p) => p.participantNumber === parseInt(participantNumber));
+
+    if (!participant) {
+      alert(`Няма участник с номер ${participantNumber}`);
+      return;
+    }
     if (!participant.name) {
       alert('Моля въведете име на участника преди да започнете хронометъра.');
       return;
     }
 
     const startTime = new Date();
-    const updatedParticipants = participants.map((participant) =>
-      participant.id === id
-        ? { ...participant, startTime, timerRunning: true }
-        : participant
+    const updatedParticipants = participants.map((p) =>
+      p.participantNumber === parseInt(participantNumber)
+        ? { ...p, startTime, timerRunning: true }
+        : p
     );
     setParticipants(updatedParticipants);
-
-    axios
-      .post('/api/start', { participantId: id, startTime })
-      .then((response) => console.log('Start time saved:', response))
-      .catch((error) => console.error('Error saving start time:', error));
   };
 
   // Function to stop the timer for a specific participant
-  const handleStop = (id) => {
+  const handleStop = (participantNumber) => {
+    const participant = participants.find((p) => p.participantNumber === parseInt(participantNumber));
+
+    if (!participant) {
+      alert(`Няма участник с номер ${participantNumber}`);
+      return;
+    }
+
     const stopTime = new Date();
-    const updatedParticipants = participants.map((participant) =>
-      participant.id === id
+    const updatedParticipants = participants.map((p) =>
+      p.participantNumber === parseInt(participantNumber)
         ? {
-            ...participant,
+            ...p,
             stopTime,
-            elapsedTime: (stopTime - participant.startTime) / 1000,
+            elapsedTime: (stopTime - p.startTime) / 1000,
             timerRunning: false,
           }
-        : participant
-    );
-    setParticipants(updatedParticipants);
-
-    axios
-      .post('/api/stop', { participantId: id, stopTime })
-      .then((response) => console.log('Stop time saved:', response))
-      .catch((error) => console.error('Error saving stop time:', error));
-  };
-
-  // Function to reset the timer and clear fields for a specific participant
-  const handleReset = (id) => {
-    const updatedParticipants = participants.map((participant) =>
-      participant.id === id
-        ? { ...participant, startTime: null, stopTime: null, elapsedTime: null, timerRunning: false }
-        : participant
+        : p
     );
     setParticipants(updatedParticipants);
   };
 
-  // Function to add a new row
-  const handleAddRow = () => {
-    const newParticipant = {
-      id: uuidv4(),
-      name: '',
-      startTime: null,
-      stopTime: null,
-      elapsedTime: null,
-      timerRunning: false,
-      participantNumber: nextParticipantNumber,
-    };
-
-    setNextParticipantNumber(nextParticipantNumber + 1); // Increment participant number for next addition
-    setParticipants([...participants, newParticipant]);
+  // Handle pressing "Enter" for starting
+  const handleStartInputEnter = (event) => {
+    if (event.key === 'Enter') {
+      handleStart(startInput);
+      setStartInput('');
+    }
   };
 
-  // Function to handle open of dialog to confirm deletion
+  // Handle pressing "Enter" for stopping
+  const handleStopInputEnter = (event) => {
+    if (event.key === 'Enter') {
+      handleStop(stopInput);
+      setStopInput('');
+    }
+  };
+
+  // Open delete confirmation dialog
   const handleOpenDeleteDialog = (id) => {
     setDeleteIndex(id);
     setDialogOpen(true);
   };
 
-  // Function to delete a row
+  // Handle participant deletion
   const handleDeleteRow = () => {
     const updatedParticipants = participants.filter((participant) => participant.id !== deleteIndex);
     setParticipants(updatedParticipants);
     setDialogOpen(false);
-  };
-
-  // Function to save all participants data
-  const handleSaveAll = () => {
-    if (participants.length === 0) {
-      alert('Няма участници за запазване.');
-      return;
-    }
-
-    axios
-      .post('/api/save-all', { participants })
-      .then((response) => {
-        console.log('All participants saved:', response);
-        setShowSnackbar(true);
-      })
-      .catch((error) => console.error('Error saving participants:', error));
-  };
-
-  // Function to generate a certificate for a participant
-  const handleGenerateCertificate = (participant) => {
-    console.log(`Generating certificate for ${participant.name} with stop time ${participant.stopTime}`);
-    alert(`Сертификатът за ${participant.name} е генериран успешно!`);
   };
 
   return (
@@ -191,6 +178,39 @@ const ParticipantTable = () => {
       <Typography variant="h4" gutterBottom>
         Хронометър на участниците
       </Typography>
+
+      {/* Two rows for Start and Stop inputs */}
+      <Grid container spacing={2} style={{ marginBottom: '20px' }}>
+        {/* Start row */}
+        <Grid item xs={2}>
+          <Typography variant="h6">Старт:</Typography>
+        </Grid>
+        <Grid item xs={10}>
+          <TextField
+            label="Въведете номер на участник"
+            value={startInput}
+            onChange={(e) => setStartInput(e.target.value)}
+            onKeyPress={handleStartInputEnter}
+            variant="outlined"
+            fullWidth
+          />
+        </Grid>
+
+        {/* Stop row */}
+        <Grid item xs={2}>
+          <Typography variant="h6">Спри:</Typography>
+        </Grid>
+        <Grid item xs={10}>
+          <TextField
+            label="Въведете номер на участник"
+            value={stopInput}
+            onChange={(e) => setStopInput(e.target.value)}
+            onKeyPress={handleStopInputEnter}
+            variant="outlined"
+            fullWidth
+          />
+        </Grid>
+      </Grid>
 
       <Grid container spacing={2} alignItems="center">
         <Grid item>
@@ -220,8 +240,6 @@ const ParticipantTable = () => {
                   <TableCell>Номер на участник</TableCell>
                   <TableCell>Име</TableCell>
                   <TableCell>Начално време</TableCell>
-                  <TableCell>Хронометър</TableCell>
-                  <TableCell>Действия</TableCell>
                   <TableCell>Изминало време</TableCell>
                   <TableCell>Сертификат</TableCell>
                   <TableCell>Изтриване</TableCell>
@@ -248,40 +266,6 @@ const ParticipantTable = () => {
                         : '-'}
                     </TableCell>
                     <TableCell>
-                      {participant.timerRunning ? 'Работи...' : 'Спряно'}
-                    </TableCell>
-                    <TableCell>
-                      {!participant.timerRunning ? (
-                        <Button
-                          variant="contained"
-                          color="success"
-                          startIcon={<PlayArrow />}
-                          onClick={() => handleStart(participant.id)}
-                        >
-                          Старт
-                        </Button>
-                      ) : (
-                        <>
-                          <Button
-                            variant="contained"
-                            color="error"
-                            startIcon={<Stop />}
-                            onClick={() => handleStop(participant.id)}
-                            style={{ marginRight: '10px' }}
-                          >
-                            Спри
-                          </Button>
-                          <Button
-                            variant="outlined"
-                            startIcon={<Refresh />}
-                            onClick={() => handleReset(participant.id)}
-                          >
-                            Нулиране
-                          </Button>
-                        </>
-                      )}
-                    </TableCell>
-                    <TableCell>
                       {participant.elapsedTime
                         ? `${participant.elapsedTime} секунди`
                         : '-'}
@@ -292,7 +276,7 @@ const ParticipantTable = () => {
                           variant="contained"
                           color="info"
                           startIcon={<Assignment />}
-                          onClick={() => handleGenerateCertificate(participant)}
+                          onClick={() => alert(`Сертификат за ${participant.name}`)}
                         >
                           Сертификат
                         </Button>
@@ -301,68 +285,39 @@ const ParticipantTable = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      <IconButton
+                      <Button
+                        variant="contained"
                         color="secondary"
                         onClick={() => handleOpenDeleteDialog(participant.id)}
                       >
-                        <Delete />
-                      </IconButton>
+                        Изтрий
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </TableContainer>
-
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<Add />}
-            onClick={handleAddRow}
-            style={{ marginTop: '20px' }}
-          >
-            Добавяне на ред
-          </Button>
-
-          <Button
-            variant="contained"
-            color="success"
-            startIcon={<Save />}
-            onClick={handleSaveAll}
-            style={{ marginLeft: '20px' }}
-          >
-            Запазване на всички участници
-          </Button>
-
-          <Snackbar
-            open={showSnackbar}
-            autoHideDuration={3000}
-            onClose={handleSnackbarClose}
-            message="Всички участници са успешно запазени!"
-          />
-          
-          {/* Delete confirmation dialog */}
-          <Dialog
-            open={dialogOpen}
-            onClose={() => setDialogOpen(false)}
-          >
-            <DialogTitle>Потвърдете изтриването</DialogTitle>
-            <DialogContent>
-              <DialogContentText>
-                Сигурни ли сте, че искате да изтриете този участник?
-              </DialogContentText>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setDialogOpen(false)} color="primary">
-                Отказ
-              </Button>
-              <Button onClick={handleDeleteRow} color="secondary">
-                Изтрий
-              </Button>
-            </DialogActions>
-          </Dialog>
         </>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>
+        <DialogTitle>Потвърдете изтриването</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Сигурни ли сте, че искате да изтриете този участник?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)} color="primary">
+            Отказ
+          </Button>
+          <Button onClick={handleDeleteRow} color="secondary">
+            Изтрий
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 };
