@@ -164,6 +164,10 @@ console.log('>>>>>>> ' + !participant.startTime)
     setDialogOpen(true);
   };
 
+  const handlePrint = () => {
+    window.print(); // This will open the print dialog in the browser
+  };
+
   const handleDeleteRow = () => {
     const updatedParticipants = participants.filter((participant) => participant.id !== deleteIndex);
     setParticipants(updatedParticipants);
@@ -262,6 +266,11 @@ console.log('>>>>>>> ' + !participant.startTime)
           <Grid item>
             <Button variant="contained" color="secondary" onClick={handleReset}>
               Изчисти таблицата
+            </Button>
+          </Grid>
+          <Grid item>
+            <Button variant="contained" color="success" onClick={handlePrint}>
+              Принтирай
             </Button>
           </Grid>
         </Grid>
