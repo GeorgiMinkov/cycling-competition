@@ -98,13 +98,16 @@ const ParticipantTable = () => {
 
   const handleStart = (participantNumber) => {
     const participant = participants.find((p) => p.participantNumber === parseInt(participantNumber));
-
+console.log('>>>>>>> ' + !participant.startTime)
     if (!participant) {
       alert(`Няма участник с номер ${participantNumber}`);
       return;
     }
     if (!participant.name) {
       alert('Моля въведете име на участника преди да започнете хронометъра.');
+      return;
+    } else if (participant.startTime) {
+      alert(`Участник с номер ${participantNumber} вече е започнал - ${participant.startTime}`)
       return;
     }
 
@@ -122,6 +125,9 @@ const ParticipantTable = () => {
 
     if (!participant) {
       alert(`Няма участник с номер ${participantNumber}`);
+      return;
+    } else if (participant.stopTime) {
+      alert(`Участник с номер ${participantNumber} вече има завършено време - ${formatElapsedTime(participant.elapsedTime)}`)
       return;
     }
 
@@ -167,18 +173,25 @@ const ParticipantTable = () => {
   // Function to sort participants by elapsed time
   const handleSortByElapsedTime = () => {
     const sortedParticipants = [...participants].sort((a, b) => {
-      if (a.elapsedTime === null || b.elapsedTime === null) {
-        return 0; // If any elapsedTime is null, don't change order
+      // If 'a' has null elapsedTime, it should be placed last
+      if (a.elapsedTime === null) {
+        return 1;
       }
-
+      // If 'b' has null elapsedTime, it should be placed last
+      if (b.elapsedTime === null) {
+        return -1;
+      }
+  
+      // Sorting based on elapsedTime
       return sortOrder === 'asc'
         ? a.elapsedTime - b.elapsedTime
         : b.elapsedTime - a.elapsedTime;
     });
-
+  
     setParticipants(sortedParticipants);
     setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); // Toggle the sorting order
   };
+  
 
   // Helper function to format elapsed time in minutes and seconds
   const formatElapsedTime = (elapsedTime) => {
@@ -243,7 +256,7 @@ const ParticipantTable = () => {
           </Grid>
           <Grid item>
             <Button variant="contained" color="primary" onClick={handleCreateTable}>
-              Създаване на таблица
+              Добавяне на редове
             </Button>
           </Grid>
           <Grid item>
